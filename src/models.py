@@ -46,8 +46,8 @@ class ImageDataset(Dataset):
     #         transforms.Resize((256,256)),
     #         transforms.PILToTensor()
     #     ])
-    
-      return transforms.PILToTensor()(Image.fromarray(patch))
+      return patch
+      # return transforms.PILToTensor()(Image.fromarray(patch))
   
   def __len__(self):
       return len(self.image_filenames)

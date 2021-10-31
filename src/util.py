@@ -1,6 +1,8 @@
 import requests
 from archive import extract
 import numpy as np
+import torch
+import math
 
 def fetch_dataset():
     url = 'https://www2.eecs.berkeley.edu/Research/Projects/CS/vision/grouping/segbench/BSDS300-images.tgz'
@@ -30,3 +32,44 @@ def Im2PatchNP(img, win, stride=1):
             Y[k,:,:] = np.array(patch[:]).reshape(TotalPatNum, endc)
             k = k + 1
     return Y.reshape([win, win, TotalPatNum, endc])
+
+# ------------------------ Data manupulation functions ----------------------- #
+
+def uint2float(img):
+    return np.float32(img / 255.)
+
+def float2tensor(img):
+    return torch.from_numpy(np.ascontiguousarray(img)).permute(2, 0, 1).float()
+
+def tensor2uint(img):
+    img = img.data.squeeze().float().clamp_(0, 1).cpu().numpy()
+    if img.ndim == 3:
+        img = np.transpose(img, (1, 2, 0))
+    return np.uint8((img*255.0).round())
+
+# ---------------------------------------------------------------------------- #
+
+
+# ----------------------- Image manipulation functions ----------------------- #
+
+def addNoise(img, db=25):
+    """
+    Function to add gaussian noise to target image
+
+    INPUT - numpy uint8 array image
+
+    OUTPUT - tensor
+    """
+    print(img.shape)
+    noise = np.random.normal(0, db / 255., img.shape)
+    return float2tensor(noise + (img/255.)), float2tensor(noise)
+
+def calcPSNR(clean, noisy):
+    """
+    Calculate PSNR
+
+    INPUT - two tensors of clean and noisy image
+    """
+    mse = torch.mean((noisy - clean) ** 2)
+    return 20 * math.log10(1. / (mse ** .5))
+
