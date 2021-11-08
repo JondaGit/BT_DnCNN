@@ -3,6 +3,7 @@ from archive import extract
 import numpy as np
 import torch
 import math
+import random
 
 def fetch_dataset():
     url = 'https://www2.eecs.berkeley.edu/Research/Projects/CS/vision/grouping/segbench/BSDS300-images.tgz'
@@ -47,10 +48,35 @@ def tensor2uint(img):
         img = np.transpose(img, (1, 2, 0))
     return np.uint8((img*255.0).round())
 
+def uint2tensor(img):
+    if img.ndim == 2:
+        img = np.expand_dims(img, axis=2)
+    return torch.from_numpy(np.ascontiguousarray(img)).permute(2, 0, 1).float().div(255.)
+
 # ---------------------------------------------------------------------------- #
 
 
 # ----------------------- Image manipulation functions ----------------------- #
+
+def augment_img(img, mode=0):
+    """Augment input image (np array format)
+    """
+    if mode == 0:
+        return img
+    elif mode == 1:
+        return np.flipud(np.rot90(img))
+    elif mode == 2:
+        return np.flipud(img)
+    elif mode == 3:
+        return np.rot90(img, k=3)
+    elif mode == 4:
+        return np.flipud(np.rot90(img, k=2))
+    elif mode == 5:
+        return np.rot90(img)
+    elif mode == 6:
+        return np.rot90(img, k=2)
+    elif mode == 7:
+        return np.flipud(np.rot90(img, k=3))
 
 def addNoise(img, db=25):
     """

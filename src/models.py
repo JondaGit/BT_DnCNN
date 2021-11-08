@@ -3,9 +3,10 @@ import os
 from torch.utils.data import Dataset
 from PIL import Image
 from torchvision import transforms
-from util import Im2PatchNP
+import util
 import random
 import numpy as np
+import torch
 
 class DnCNN(nn.Module):
     def __init__(self):
@@ -34,6 +35,7 @@ class ImageDataset(Dataset):
       super(ImageDataset, self).__init__()
       self.image_filenames = [os.path.join(image_dir, x) for x in os.listdir(image_dir) if is_image_file(x)]
       self.patch_size = patch_size
+      self.sigma = 25
 
   def __getitem__(self, index):
       input = np.asarray(Image.open(self.image_filenames[index]))
@@ -41,13 +43,17 @@ class ImageDataset(Dataset):
       rnd_h = random.randint(0, max(0, H - self.patch_size))
       rnd_w = random.randint(0, max(0, W - self.patch_size))
 
-      patch = input[rnd_h:rnd_h + self.patch_size, rnd_w:rnd_w + self.patch_size, :]
-    #   transform = transforms.Compose([
-    #         transforms.Resize((256,256)),
-    #         transforms.PILToTensor()
-    #     ])
-      return patch
-      # return transforms.PILToTensor()(Image.fromarray(patch))
+      patch_H = input[rnd_h:rnd_h + self.patch_size, rnd_w:rnd_w + self.patch_size, :]
+    
+      patch_H = util.augment_img(patch_H, random.randint(0, 7))
+      patch_H = util.uint2tensor(patch_H)
+      patch_L = patch_H.clone()
+
+      # ----------------------------------- Noise ---------------------------------- #
+      noise = torch.randn(patch_H.size()).mul_(self.sigma/255.0)
+      patch_L.add_(noise)
+
+      return { 'L': patch_L, 'H': patch_H, 'N': noise }
   
   def __len__(self):
       return len(self.image_filenames)
