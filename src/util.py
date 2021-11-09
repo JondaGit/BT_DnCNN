@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import math
 import random
+import matplotlib.pyplot as plt
 
 def fetch_dataset():
     url = 'https://www2.eecs.berkeley.edu/Research/Projects/CS/vision/grouping/segbench/BSDS300-images.tgz'
@@ -99,3 +100,28 @@ def calcPSNR(clean, noisy):
     mse = torch.mean((noisy - clean) ** 2)
     return 20 * math.log10(1. / (mse ** .5))
 
+
+def makePlot(images = [], title="Title", savePath=None, show=False):
+    fig, ax = plt.subplots(1, 2)
+    ax[0].imshow(images[0])
+    ax[0].axis("off")
+    ax[1].imshow(images[1])
+    ax[1].axis("off")
+    plt.subplots_adjust(wspace=0.01, hspace=0)
+    plt.savefig('plot.png', bbox_inches='tight', dpi=800)
+
+def patchify(img, size=256):
+    H, W = img.shape[:2];
+    output = np.empty((int(H/size), int(W/size), size, size, 3), dtype=np.uint8)
+    for y in range(output.shape[0]):
+        for x in range(output.shape[1]):
+            output[y][x] = img[y * size:y * size + size, x * size: x * size + size]
+    return output
+
+def unpatchify(patches):
+    rows, cols, size = patches.shape[:3]
+    output = np.empty((rows * size, cols * size, 3), dtype=np.uint8)
+    for y in range(rows):
+        for x in range(cols):
+            output[y * size:y * size + size, x * size: x * size + size] = patches[y][x]
+    return output
