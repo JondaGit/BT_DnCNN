@@ -3,8 +3,9 @@ from archive import extract
 import numpy as np
 import torch
 import math
-import random
 import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1.inset_locator import zoomed_inset_axes
+from dataclasses import dataclass
 
 def fetch_dataset():
     url = 'https://www2.eecs.berkeley.edu/Research/Projects/CS/vision/grouping/segbench/BSDS300-images.tgz'
@@ -17,26 +18,7 @@ def fetch_dataset():
     # archive = tarfile.open('../data/BSDS300-images.tgz' , "r:*")
     # archive.extract('images/train', '../data/train')
 
-def Im2PatchNP(img, win, stride=1):
-    '''
-    Patch creating function, input dataset must be of numpy array format
-    '''
-    k = 0
-    endc = img.shape[2]
-    endw = img.shape[1]
-    endh = img.shape[0]
-    patch = img[0:endh-win+0+1:stride, 0:endw-win+0+1:stride, :]
-    TotalPatNum = patch.shape[0] * patch.shape[1]
-    Y = np.zeros([win*win,TotalPatNum, endc], np.float32)
-    for i in range(win):
-        for j in range(win):
-            patch = img[i:endh-win+i+1:stride, j:endw-win+j+1:stride, :]
-            Y[k,:,:] = np.array(patch[:]).reshape(TotalPatNum, endc)
-            k = k + 1
-    return Y.reshape([win, win, TotalPatNum, endc])
-
 # ------------------------ Data manupulation functions ----------------------- #
-
 def uint2float(img):
     return np.float32(img / 255.)
 
@@ -53,7 +35,6 @@ def uint2tensor(img):
     if img.ndim == 2:
         img = np.expand_dims(img, axis=2)
     return torch.from_numpy(np.ascontiguousarray(img)).permute(2, 0, 1).float().div(255.)
-
 # ---------------------------------------------------------------------------- #
 
 
@@ -91,6 +72,7 @@ def addNoise(img, db=25):
     noise = np.random.normal(0, db / 255., img.shape)
     return float2tensor(noise + (img/255.)), float2tensor(noise)
 
+# ----------------------------------- Stats ---------------------------------- #
 def calcPSNR(clean, noisy):
     """
     Calculate PSNR
@@ -99,6 +81,18 @@ def calcPSNR(clean, noisy):
     """
     mse = torch.mean((noisy - clean) ** 2)
     return 20 * math.log10(1. / (mse ** .5))
+# ---------------------------------------------------------------------------- #
+
+
+# --------------------------------- Plotting --------------------------------- #
+@dataclass
+class ZoomParams:
+    xpos: int
+    ypos: int
+    size: int
+    color = 'white'
+    zoom = 2.
+    padding = .5
 
 
 def makePlot(images = [], title="Title", savePath=None, show=False):
@@ -108,8 +102,46 @@ def makePlot(images = [], title="Title", savePath=None, show=False):
     ax[1].imshow(images[1])
     ax[1].axis("off")
     plt.subplots_adjust(wspace=0.01, hspace=0)
-    plt.savefig('plot.png', bbox_inches='tight', dpi=800)
+    if savePath:
+        plt.savefig(savePath, bbox_inches='tight', dpi=800)
+    if show:
+        plt.show()
 
+def plotRow(axes, imgs, labels, zoomParams: ZoomParams=None):
+    for index, axis in enumerate(axes):
+        axis.tick_params(
+            bottom=False,
+            left=False,
+            labelleft=False,
+            labelbottom=False)
+        axis.imshow(imgs[index])
+        axis.set_xlabel(labels[index], fontsize=14)
+        if zoomParams:
+            insetZoom(axis, imgs[index], zoomParams)
+
+def insetZoom(axis, image, zoomParams: ZoomParams):
+    inset_axes = zoomed_inset_axes(axis,
+                               zoom=zoomParams.zoom, 
+                               loc='upper right', 
+                               borderpad=zoomParams.padding)
+    inset_axes.set_xlim(zoomParams.xpos, zoomParams.xpos + zoomParams.size)
+    inset_axes.set_ylim(zoomParams.ypos + zoomParams.size, zoomParams.ypos)
+    for spine in inset_axes.spines.values():
+            spine.set_edgecolor(zoomParams.color)
+            spine.set_alpha(0.5)
+    inset_axes.tick_params(
+        bottom=False,      # ticks along the bottom edge are off
+        left=False,
+        labelleft=False,
+        labelbottom=False)
+    inset_axes.imshow(image)
+    axis.indicate_inset_zoom(inset_axes, edgecolor=zoomParams.color)
+            
+# ---------------------------------------------------------------------------- #
+
+
+
+# ---------------------------- Image segmentation ---------------------------- #
 def patchify(img, size=256):
     H, W = img.shape[:2];
     output = np.empty((int(H/size), int(W/size), size, size, 3), dtype=np.uint8)
@@ -125,3 +157,4 @@ def unpatchify(patches):
         for x in range(cols):
             output[y * size:y * size + size, x * size: x * size + size] = patches[y][x]
     return output
+# ---------------------------------------------------------------------------- #

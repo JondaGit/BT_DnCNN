@@ -11,24 +11,25 @@ import torch
 class DnCNN(nn.Module):
     def __init__(self):
         super(DnCNN, self).__init__()
-        # in layer
-        self.conv1 = nn.Conv2d(in_channels=3, out_channels=64, kernel_size=3, padding=1, bias=False)
-        self.relu1 = nn.ReLU(inplace=True)
-        # hidden layers
-        hidden_layers = []
-        for i in range(18):
-          hidden_layers.append(nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, padding=1, bias=False))
-          hidden_layers.append(nn.BatchNorm2d(64))
-          hidden_layers.append(nn.ReLU(inplace=True))
-        self.mid_layer = nn.Sequential(*hidden_layers)
-        # out layer
-        self.conv3 = nn.Conv2d(in_channels=64, out_channels=3, kernel_size=3, padding=1, bias=False)
 
-    def forward(self, x):
-        out = self.relu1(self.conv1(x))
-        out = self.mid_layer(out)
-        out = self.conv3(out)
-        return out
+        head = []
+        head.append(nn.Conv2d(in_channels=3, out_channels=64, kernel_size=3, stride=1, padding=1, bias=True))
+        head.append(nn.ReLU(inplace=True))
+
+        body = []
+        for _ in range(15):
+          body.append(nn.Conv2d(in_channels=64, out_channels=64, kernel_size=3, padding=1, bias=True))
+          body.append(nn.BatchNorm2d(64, momentum=0.9, eps=1e-04, affine=True))
+          body.append(nn.ReLU(inplace=True))
+        
+        tail = []
+        tail.append(nn.Conv2d(in_channels=64, out_channels=3, kernel_size=3, padding=1, bias=True))
+
+        self.model = nn.Sequential(*(head + body + tail))
+
+    def forward(self, img):
+        noise = self.model(img)
+        return img - noise
 
 class ImageDataset(Dataset):
   def __init__(self, image_dir, patch_size=40, mode="train"):
