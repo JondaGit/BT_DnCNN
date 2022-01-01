@@ -6,6 +6,7 @@ import math
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1.inset_locator import zoomed_inset_axes
 from dataclasses import dataclass
+from PIL import Image
 
 def fetch_dataset():
     url = 'https://www2.eecs.berkeley.edu/Research/Projects/CS/vision/grouping/segbench/BSDS300-images.tgz'
@@ -106,6 +107,38 @@ def makePlot(images = [], title="Title", savePath=None, show=False):
         plt.savefig(savePath, bbox_inches='tight', dpi=800)
     if show:
         plt.show()
+
+def makeSamplePlot(model, images, sigmas, title, subtitles=None, zoomParams=None, figLocation='test'):
+    fig = plt.figure(constrained_layout=True)
+    fig.suptitle(title, fontsize=26)
+    fig.set_figheight(6 * len(images))
+    fig.set_figwidth(20)
+    subfigs = fig.subfigures(nrows=len(images), ncols=1, hspace=.15)
+    for row, subfig in enumerate(subfigs):
+        if subtitles:
+            subfig.suptitle(subtitles[row], fontsize=20)
+        img_H = np.asarray(Image.open(images[row]))
+        img_H = uint2float(img_H)
+        img_L = np.copy(img_H)
+        img_L += np.random.normal(0, sigmas[row]/255.0, img_L.shape)
+        img_L = float2tensor(img_L)
+        img_H = float2tensor(img_H)
+        with torch.no_grad():
+            img_E = model(img_L.unsqueeze(0).cuda())  
+        HL_psnr = calcPSNR(img_H, img_L)
+        HE_psnr = calcPSNR(img_H, img_E.cpu())
+        img_H = tensor2uint(img_H)
+        img_L = tensor2uint(img_L)
+        img_E = tensor2uint(img_E.squeeze(0))
+
+        axs = subfig.subplots(nrows=1, ncols=3) 
+        labels = [
+            f"Noisy image ({HL_psnr:.4f} dB)",
+            f"Denoised image ({HE_psnr:.4f} dB)",
+            "Reference image"
+        ]
+        plotRow(axs, [img_L, img_E, img_H], labels, zoomParams[row] if zoomParams else None)
+    plt.savefig(figLocation, bbox_inches='tight',  facecolor="w", dpi=400)
 
 def plotRow(axes, imgs, labels, zoomParams: ZoomParams=None):
     for index, axis in enumerate(axes):

@@ -34,15 +34,20 @@ class DnCNN(nn.Module):
 class ImageDataset(Dataset):
   def __init__(self, image_dir, patch_size=40, mode="train"):
       super(ImageDataset, self).__init__()
-      self.image_filenames = np.array([os.path.join(image_dir, x) for x in os.listdir(image_dir) if is_image_file(x)])
+      self.image_filenames = np.array([os.path.join(image_dir, x) for x in os.listdir(image_dir)])
       if mode == "test":
         self.image_filenames = self.image_filenames[np.random.choice(len(self.image_filenames), size=30, replace=False)]
+      
+      self.images = []
+      for image in self.image_filenames:
+        self.images.append(np.asarray(Image.open(image)))
+
       self.patch_size = patch_size
-      self.sigma = 25
+      # self.sigma = 25
       self.mode = mode
 
   def __getitem__(self, index):
-      img_H = np.asarray(Image.open(self.image_filenames[index]))
+      img_H = self.images[index]
 
       if self.mode == "train":
         H, W = img_H.shape[:2]
@@ -56,12 +61,12 @@ class ImageDataset(Dataset):
         img_L = img_H.clone()
 
         # ----------------------------------- Noise ---------------------------------- #
-        noise = torch.randn(img_L.size()).mul_(self.sigma/255.0)
+        noise = torch.randn(img_L.size()).mul_((random.random() * 25)/255.0)
         img_L.add_(noise)
       else:
         img_H = util.uint2float(img_H)
         img_L = np.copy(img_H)
-        img_L += np.random.normal(0, self.sigma/255.0, img_L.shape)
+        img_L += np.random.normal(0, (random.random() * 25)/255.0, img_L.shape)
 
         img_L = util.float2tensor(img_L)
         img_H = util.float2tensor(img_H)
@@ -70,6 +75,3 @@ class ImageDataset(Dataset):
   
   def __len__(self):
       return len(self.image_filenames)
-
-def is_image_file(filename):
-    return any(filename.endswith(extension) for extension in [".png", ".jpg", ".jpeg", ".gif"])
