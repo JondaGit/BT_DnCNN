@@ -84,96 +84,6 @@ def calcPSNR(clean, noisy):
     return 20 * math.log10(1. / (mse ** .5))
 # ---------------------------------------------------------------------------- #
 
-
-# --------------------------------- Plotting --------------------------------- #
-@dataclass
-class ZoomParams:
-    xpos: int
-    ypos: int
-    size: int
-    color = 'white'
-    zoom = 2.
-    padding = .5
-
-
-def makePlot(images = [], title="Title", savePath=None, show=False):
-    fig, ax = plt.subplots(1, 2)
-    ax[0].imshow(images[0])
-    ax[0].axis("off")
-    ax[1].imshow(images[1])
-    ax[1].axis("off")
-    plt.subplots_adjust(wspace=0.01, hspace=0)
-    if savePath:
-        plt.savefig(savePath, bbox_inches='tight', dpi=800)
-    if show:
-        plt.show()
-
-def makeSamplePlot(model, images, sigmas, title, subtitles=None, zoomParams=None, figLocation='test'):
-    fig = plt.figure(constrained_layout=True)
-    fig.suptitle(title, fontsize=26)
-    fig.set_figheight(6 * len(images))
-    fig.set_figwidth(20)
-    subfigs = fig.subfigures(nrows=len(images), ncols=1, hspace=.15)
-    for row, subfig in enumerate(subfigs):
-        if subtitles:
-            subfig.suptitle(subtitles[row], fontsize=20)
-        img_H = np.asarray(Image.open(images[row]))
-        img_H = uint2float(img_H)
-        img_L = np.copy(img_H)
-        img_L += np.random.normal(0, sigmas[row]/255.0, img_L.shape)
-        img_L = float2tensor(img_L)
-        img_H = float2tensor(img_H)
-        with torch.no_grad():
-            img_E = model(img_L.unsqueeze(0).cuda())  
-        HL_psnr = calcPSNR(img_H, img_L)
-        HE_psnr = calcPSNR(img_H, img_E.cpu())
-        img_H = tensor2uint(img_H)
-        img_L = tensor2uint(img_L)
-        img_E = tensor2uint(img_E.squeeze(0))
-
-        axs = subfig.subplots(nrows=1, ncols=3) 
-        labels = [
-            f"Noisy image ({HL_psnr:.4f} dB)",
-            f"Denoised image ({HE_psnr:.4f} dB)",
-            "Reference image"
-        ]
-        plotRow(axs, [img_L, img_E, img_H], labels, zoomParams[row] if zoomParams else None)
-    plt.savefig(figLocation, bbox_inches='tight',  facecolor="w", dpi=400)
-
-def plotRow(axes, imgs, labels, zoomParams: ZoomParams=None):
-    for index, axis in enumerate(axes):
-        axis.tick_params(
-            bottom=False,
-            left=False,
-            labelleft=False,
-            labelbottom=False)
-        axis.imshow(imgs[index])
-        axis.set_xlabel(labels[index], fontsize=14)
-        if zoomParams:
-            insetZoom(axis, imgs[index], zoomParams)
-
-def insetZoom(axis, image, zoomParams: ZoomParams):
-    inset_axes = zoomed_inset_axes(axis,
-                               zoom=zoomParams.zoom, 
-                               loc='upper right', 
-                               borderpad=zoomParams.padding)
-    inset_axes.set_xlim(zoomParams.xpos, zoomParams.xpos + zoomParams.size)
-    inset_axes.set_ylim(zoomParams.ypos + zoomParams.size, zoomParams.ypos)
-    for spine in inset_axes.spines.values():
-            spine.set_edgecolor(zoomParams.color)
-            spine.set_alpha(0.5)
-    inset_axes.tick_params(
-        bottom=False,      # ticks along the bottom edge are off
-        left=False,
-        labelleft=False,
-        labelbottom=False)
-    inset_axes.imshow(image)
-    axis.indicate_inset_zoom(inset_axes, edgecolor=zoomParams.color)
-            
-# ---------------------------------------------------------------------------- #
-
-
-
 # ---------------------------- Image segmentation ---------------------------- #
 def patchify(img, size=256):
     H, W = img.shape[:2];
@@ -190,4 +100,41 @@ def unpatchify(patches):
         for x in range(cols):
             output[y * size:y * size + size, x * size: x * size + size] = patches[y][x]
     return output
+
+def patchifyAdaptive(img, baseSize=256):
+    """Patchify image by dividing to unevenly sized patches.
+    Maximum patch size is 256 + 255 px, width and height do not have
+    to be the same.
+    """
+    sizex = baseSize + (img.shape[1] % baseSize) // (img.shape[1] // baseSize)
+    sizey = baseSize + (img.shape[0] % baseSize) // (img.shape[0] // baseSize)
+    rows = (img.shape[0] // baseSize) - 1 # Height
+    cols = (img.shape[1] // baseSize) - 1 # Width
+    
+    output = []
+    for row in range(rows):
+        outputRow = []
+        for col in range(cols):
+            outputRow.append(img[row*sizey:row*sizey + sizey, col*sizex:col*sizex + sizex])
+        outputRow.append(img[row*sizey:row*sizey + sizey, cols*sizex:img.shape[1]])
+        output.append(outputRow)
+    # Last line
+    outputRow = []
+    for col in range(cols):
+        outputRow.append(img[rows*sizey:img.shape[0], col*sizex:col*sizex + sizex])
+    outputRow.append(img[rows*sizey:img.shape[0], cols*sizex:img.shape[1]])
+    output.append(outputRow)
+    return output
+
+def unpatchifyAdaptive(patches, width, height):
+    reconstructed = np.empty((height,width,3), dtype=np.uint8)
+    x = 0
+    y = 0
+    for row in patches:
+        for p in row:
+            reconstructed[y: y + p.shape[0], x: x + p.shape[1]] = p
+            x += p.shape[1]
+        x = 0
+        y += row[0].shape[0]
+    return reconstructed
 # ---------------------------------------------------------------------------- #
